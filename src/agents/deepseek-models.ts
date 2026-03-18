@@ -20,6 +20,7 @@ export const DEEPSEEK_MODEL_CATALOG: ModelDefinitionConfig[] = [
     contextWindow: 131072,
     maxTokens: 8192,
     cost: DEEPSEEK_DEFAULT_COST,
+    compat: { supportsUsageInStreaming: true },
   },
   {
     id: "deepseek-reasoner",
@@ -29,6 +30,7 @@ export const DEEPSEEK_MODEL_CATALOG: ModelDefinitionConfig[] = [
     contextWindow: 131072,
     maxTokens: 65536,
     cost: DEEPSEEK_DEFAULT_COST,
+    compat: { supportsUsageInStreaming: true },
   },
 ];
 
