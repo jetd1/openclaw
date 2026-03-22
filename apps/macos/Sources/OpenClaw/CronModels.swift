@@ -16,10 +16,10 @@ enum CronCustomSessionTarget: Codable, Equatable {
 
     var rawValue: String {
         switch self {
-        case .predefined(let target):
-            return target.rawValue
-        case .session(let id):
-            return "session:\(id)"
+        case let .predefined(target):
+            target.rawValue
+        case let .session(id):
+            "session:\(id)"
         }
     }
 
@@ -96,20 +96,24 @@ enum CronSchedule: Codable, Equatable {
             throw DecodingError.dataCorruptedError(
                 forKey: .at,
                 in: container,
-                debugDescription: "Missing schedule.at")
+                debugDescription: "Missing schedule.at"
+            )
         case "every":
             self = try .every(
                 everyMs: container.decode(Int.self, forKey: .everyMs),
-                anchorMs: container.decodeIfPresent(Int.self, forKey: .anchorMs))
+                anchorMs: container.decodeIfPresent(Int.self, forKey: .anchorMs)
+            )
         case "cron":
             self = try .cron(
                 expr: container.decode(String.self, forKey: .expr),
-                tz: container.decodeIfPresent(String.self, forKey: .tz))
+                tz: container.decodeIfPresent(String.self, forKey: .tz)
+            )
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind,
                 in: container,
-                debugDescription: "Unknown schedule kind: \(kind)")
+                debugDescription: "Unknown schedule kind: \(kind)"
+            )
         }
     }
 
@@ -185,12 +189,14 @@ enum CronPayload: Codable, Equatable {
                 channel: container.decodeIfPresent(String.self, forKey: .channel)
                     ?? container.decodeIfPresent(String.self, forKey: .provider),
                 to: container.decodeIfPresent(String.self, forKey: .to),
-                bestEffortDeliver: container.decodeIfPresent(Bool.self, forKey: .bestEffortDeliver))
+                bestEffortDeliver: container.decodeIfPresent(Bool.self, forKey: .bestEffortDeliver)
+            )
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind,
                 in: container,
-                debugDescription: "Unknown payload kind: \(kind)")
+                debugDescription: "Unknown payload kind: \(kind)"
+            )
         }
     }
 
@@ -328,10 +334,10 @@ struct CronJob: Identifiable, Codable, Equatable {
     /// predefined enum.
     var sessionTarget: CronSessionTarget {
         switch self.parsedSessionTarget {
-        case .predefined(let target):
-            return target
+        case let .predefined(target):
+            target
         case .session:
-            return .isolated
+            .isolated
         }
     }
 
@@ -345,8 +351,8 @@ struct CronJob: Identifiable, Codable, Equatable {
             return nil
         case .predefined(.isolated), .predefined(.current):
             return "cron:\(self.id)"
-        case .session(let id):
-            return id
+        case let .session(id):
+            id
         }
     }
 
@@ -361,7 +367,7 @@ struct CronJob: Identifiable, Codable, Equatable {
 
     var displayName: String {
         let trimmed = self.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Untitled job" : trimmed
+        trimmed.isEmpty ? "Untitled job" : trimmed
     }
 
     var nextRunDate: Date? {

@@ -147,7 +147,8 @@ extension CronJobEditor {
                 throw NSError(
                     domain: "Cron",
                     code: 0,
-                    userInfo: [NSLocalizedDescriptionKey: "Invalid every duration (use 10m, 1h, 1d)."])
+                userInfo: [NSLocalizedDescriptionKey: "Invalid every duration (use 10m, 1h, 1d)."]
+            )
             }
             return ["kind": "every", "everyMs": ms]
         case .cron:
@@ -265,7 +266,11 @@ extension CronJobEditor {
     }
 
     var effectiveSessionTargetRaw: String {
-        if self.sessionTarget == .isolated, let preserved = self.preservedSessionTargetRaw?.trimmingCharacters(in: .whitespacesAndNewlines), !preserved.isEmpty {
+        if self.sessionTarget == .isolated,
+           let preserved = self.preservedSessionTargetRaw?
+           .trimmingCharacters(in: .whitespacesAndNewlines),
+           !preserved.isEmpty
+        {
             return preserved
         }
         return self.sessionTarget.rawValue

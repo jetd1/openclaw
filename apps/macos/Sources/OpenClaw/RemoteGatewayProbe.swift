@@ -155,7 +155,9 @@ enum RemoteGatewayProbe {
                 return .failed("Set a gateway URL first")
             }
             guard self.isValidWsUrl(trimmedUrl) else {
-                return .failed("Gateway URL must use wss:// for remote hosts (ws:// only for localhost)")
+                return .failed(
+                    "Gateway URL must use wss:// for remote hosts (ws:// only for localhost)"
+                )
             }
         } else {
             let trimmedTarget = settings.target.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -173,7 +175,8 @@ enum RemoteGatewayProbe {
                 command: sshCommand,
                 cwd: nil,
                 env: nil,
-                timeout: 8)
+                timeout: 8
+            )
             guard sshResult.ok else {
                 return .failed(self.formatSSHFailure(sshResult, target: settings.target))
             }
@@ -221,7 +224,10 @@ enum RemoteGatewayProbe {
            trimmed.localizedCaseInsensitiveContains("host key verification failed")
         {
             let host = CommandResolver.parseSSHTarget(target)?.host ?? target
-            return "SSH check failed: Host key verification failed. Remove the old key with ssh-keygen -R \(host) and try again."
+            return """
+                SSH check failed: Host key verification failed. Remove the old key with \
+                ssh-keygen -R \(host) and try again.
+                """
         }
         if let trimmed, !trimmed.isEmpty {
             if let message = response.message, message.hasPrefix("exit ") {
