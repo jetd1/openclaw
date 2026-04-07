@@ -10,6 +10,10 @@ import {
   requireRegisteredProvider,
 } from "../../test/helpers/plugins/provider-registration.js";
 import googlePlugin from "./index.js";
+import {
+  GOOGLE_FRONTIER_EXECUTION_BIAS,
+  GOOGLE_FRONTIER_OUTPUT_CONTRACT,
+} from "./prompt-overlay.js";
 
 describe("google provider plugin hooks", () => {
   it("owns replay policy and reasoning mode for the direct Gemini provider", async () => {
@@ -128,6 +132,64 @@ describe("google provider plugin hooks", () => {
         tools: [tool],
       } as never),
     ).toEqual([]);
+  });
+
+  it("registers frontier Gemini prompt contributions for direct and CLI providers", async () => {
+    const { providers } = await registerProviderPlugin({
+      plugin: googlePlugin,
+      id: "google",
+      name: "Google Provider",
+    });
+    const googleProvider = requireRegisteredProvider(providers, "google");
+    const cliProvider = requireRegisteredProvider(providers, "google-gemini-cli");
+    const contribution = {
+      stablePrefix: GOOGLE_FRONTIER_OUTPUT_CONTRACT,
+      sectionOverrides: {
+        execution_bias: GOOGLE_FRONTIER_EXECUTION_BIAS,
+      },
+    };
+
+    expect(
+      googleProvider.resolveSystemPromptContribution?.({
+        config: undefined,
+        agentDir: undefined,
+        workspaceDir: undefined,
+        provider: "google",
+        modelId: "gemini-3.1-pro-preview",
+        promptMode: "full",
+        runtimeChannel: undefined,
+        runtimeCapabilities: undefined,
+        agentId: undefined,
+      } as never),
+    ).toEqual(contribution);
+
+    expect(
+      cliProvider.resolveSystemPromptContribution?.({
+        config: undefined,
+        agentDir: undefined,
+        workspaceDir: undefined,
+        provider: "google-gemini-cli",
+        modelId: "gemini-3.1-pro-preview",
+        promptMode: "full",
+        runtimeChannel: undefined,
+        runtimeCapabilities: undefined,
+        agentId: undefined,
+      } as never),
+    ).toEqual(contribution);
+
+    expect(
+      googleProvider.resolveSystemPromptContribution?.({
+        config: undefined,
+        agentDir: undefined,
+        workspaceDir: undefined,
+        provider: "google",
+        modelId: "gemini-3.1-flash",
+        promptMode: "full",
+        runtimeChannel: undefined,
+        runtimeCapabilities: undefined,
+        agentId: undefined,
+      } as never),
+    ).toBeUndefined();
   });
 
   it("wires google-thinking stream hooks for direct and Gemini CLI providers", async () => {

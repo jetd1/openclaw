@@ -33,6 +33,7 @@ import {
   normalizeAnthropicProviderConfig,
 } from "./config-defaults.js";
 import { anthropicMediaUnderstandingProvider } from "./media-understanding-provider.js";
+import { resolveAnthropicSystemPromptContribution } from "./prompt-overlay.js";
 import { buildAnthropicReplayPolicy } from "./replay-policy.js";
 import { wrapAnthropicProviderStream } from "./stream-wrappers.js";
 
@@ -462,6 +463,11 @@ export function registerAnthropicPlugin(api: OpenClawPluginApi): void {
       provider.trim().toLowerCase() === CLAUDE_CLI_BACKEND_ID
         ? resolveClaudeCliSyntheticAuth()
         : undefined,
+    resolveSystemPromptContribution: (ctx) =>
+      resolveAnthropicSystemPromptContribution({
+        modelProviderId: PROVIDER_ID,
+        modelId: ctx.modelId,
+      }),
     buildReplayPolicy: buildAnthropicReplayPolicy,
     isModernModelRef: ({ modelId }) => matchesAnthropicModernModel(modelId),
     resolveReasoningOutputMode: () => "native",

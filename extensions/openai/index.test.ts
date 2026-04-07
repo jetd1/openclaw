@@ -325,8 +325,14 @@ describe("openai plugin", () => {
     expect(OPENAI_GPT5_EXECUTION_BIAS).toContain(
       "Do prerequisite lookup or discovery before dependent actions.",
     );
+    expect(OPENAI_GPT5_EXECUTION_BIAS).toContain(
+      "After compaction or summary refresh, resume the next unfinished action instead of restarting the analysis from scratch.",
+    );
     expect(OPENAI_GPT5_OUTPUT_CONTRACT).toContain(
       "Return the requested sections only, in the requested order.",
+    );
+    expect(OPENAI_GPT5_OUTPUT_CONTRACT).toContain(
+      "When the latest user turn conflicts with an older summary, memory, or prior plan, follow the latest user turn.",
     );
     expect(OPENAI_GPT5_OUTPUT_CONTRACT).toContain(
       "Prefer commas, periods, or parentheses over em dashes in normal prose.",

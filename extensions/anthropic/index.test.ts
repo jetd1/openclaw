@@ -1,6 +1,10 @@
 import { capturePluginRegistration } from "openclaw/plugin-sdk/testing";
 import { describe, expect, it, vi } from "vitest";
 import { registerSingleProviderPlugin } from "../../test/helpers/plugins/plugin-registration.js";
+import {
+  ANTHROPIC_FRONTIER_EXECUTION_BIAS,
+  ANTHROPIC_FRONTIER_OUTPUT_CONTRACT,
+} from "./prompt-overlay.js";
 
 const { readClaudeCliCredentialsForSetupMock, readClaudeCliCredentialsForRuntimeMock } = vi.hoisted(
   () => ({
@@ -45,6 +49,43 @@ describe("anthropic provider replay hooks", () => {
         modelId: "claude-sonnet-4-6",
       } as never),
     ).toBe("native");
+  });
+
+  it("registers frontier Claude prompt contributions", async () => {
+    const provider = await registerSingleProviderPlugin(anthropicPlugin);
+
+    expect(
+      provider.resolveSystemPromptContribution?.({
+        config: undefined,
+        agentDir: undefined,
+        workspaceDir: undefined,
+        provider: "anthropic",
+        modelId: "claude-sonnet-4-6",
+        promptMode: "full",
+        runtimeChannel: undefined,
+        runtimeCapabilities: undefined,
+        agentId: undefined,
+      } as never),
+    ).toEqual({
+      stablePrefix: ANTHROPIC_FRONTIER_OUTPUT_CONTRACT,
+      sectionOverrides: {
+        execution_bias: ANTHROPIC_FRONTIER_EXECUTION_BIAS,
+      },
+    });
+
+    expect(
+      provider.resolveSystemPromptContribution?.({
+        config: undefined,
+        agentDir: undefined,
+        workspaceDir: undefined,
+        provider: "anthropic",
+        modelId: "claude-haiku-4-5",
+        promptMode: "full",
+        runtimeChannel: undefined,
+        runtimeCapabilities: undefined,
+        agentId: undefined,
+      } as never),
+    ).toBeUndefined();
   });
 
   it("owns replay policy for Claude transports", async () => {

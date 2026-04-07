@@ -14,6 +14,7 @@ import {
 import { buildGoogleGeminiCliBackend } from "./cli-backend.js";
 import { registerGoogleGeminiCliProvider } from "./gemini-cli-provider.js";
 import { buildGoogleMusicGenerationProvider } from "./music-generation-provider.js";
+import { resolveGoogleSystemPromptContribution } from "./prompt-overlay.js";
 import { isModernGoogleModel, resolveGoogleGeminiForwardCompatModel } from "./provider-models.js";
 import { createGeminiWebSearchProvider } from "./src/gemini-web-search-provider.js";
 import { buildGoogleVideoGenerationProvider } from "./video-generation-provider.js";
@@ -163,6 +164,11 @@ export default definePluginEntry({
         resolveGoogleGeminiForwardCompatModel({
           providerId: ctx.provider,
           ctx,
+        }),
+      resolveSystemPromptContribution: (ctx) =>
+        resolveGoogleSystemPromptContribution({
+          modelProviderId: "google",
+          modelId: ctx.modelId,
         }),
       ...GOOGLE_GEMINI_PROVIDER_HOOKS,
       isModernModelRef: ({ modelId }) => isModernGoogleModel(modelId),
