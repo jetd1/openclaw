@@ -37,7 +37,7 @@ export function createDefaultQaRunSelection(scenarios: QaSeedScenario[]): QaLabR
   };
 }
 
-function defaultModelForMode(mode: QaProviderMode, alternate = false) {
+export function defaultQaModelForMode(mode: QaProviderMode, alternate = false) {
   if (mode === "live-frontier") {
     return "openai/gpt-5.4";
   }
@@ -74,8 +74,11 @@ export function normalizeQaRunSelection(
   const providerMode = normalizeProviderMode(payload.providerMode);
   return {
     providerMode,
-    primaryModel: normalizeModel(payload.primaryModel, defaultModelForMode(providerMode)),
-    alternateModel: normalizeModel(payload.alternateModel, defaultModelForMode(providerMode, true)),
+    primaryModel: normalizeModel(payload.primaryModel, defaultQaModelForMode(providerMode)),
+    alternateModel: normalizeModel(
+      payload.alternateModel,
+      defaultQaModelForMode(providerMode, true),
+    ),
     fastMode:
       typeof payload.fastMode === "boolean" ? payload.fastMode : providerMode === "live-frontier",
     scenarioIds: normalizeScenarioIds(payload.scenarioIds, scenarios),
