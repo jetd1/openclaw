@@ -1,4 +1,5 @@
 import { readQaScenarioPack } from "../../../extensions/qa-lab/api.js";
+import { requireKovaCapabilityIds } from "../capabilities/registry.js";
 import type { KovaScenarioResult } from "../contracts/run-artifact.js";
 
 export type KovaQaScenarioCatalogEntry = {
@@ -28,12 +29,68 @@ export function listKovaQaScenarios(): KovaQaScenarioCatalogEntry[] {
 }
 
 export function buildKovaQaCapabilities(surface?: string) {
-  const capabilities = new Set<string>(["behavior", "qa"]);
+  const capabilities = new Set<string>(["workflow.behavior", "lane.qa"]);
   const normalizedSurface = surface?.trim();
-  if (normalizedSurface) {
-    capabilities.add(`surface:${normalizedSurface}`);
+  switch (normalizedSurface) {
+    case "channel":
+      capabilities.add("channel.shared");
+      break;
+    case "character":
+      capabilities.add("character.roleplay");
+      break;
+    case "config":
+      capabilities.add("config.apply");
+      capabilities.add("config.restart-recovery");
+      break;
+    case "cron":
+      capabilities.add("automation.cron");
+      break;
+    case "discovery":
+      capabilities.add("discovery.source-docs");
+      break;
+    case "dm":
+      capabilities.add("channel.direct");
+      break;
+    case "harness":
+      capabilities.add("lane.qa");
+      break;
+    case "image-generation":
+      capabilities.add("image.generation");
+      break;
+    case "image-understanding":
+      capabilities.add("image.understanding");
+      break;
+    case "inventory":
+      capabilities.add("inventory.runtime");
+      break;
+    case "mcp":
+      capabilities.add("mcp.tools");
+      break;
+    case "memory":
+      capabilities.add("memory.core");
+      break;
+    case "message-actions":
+      capabilities.add("messages.lifecycle");
+      break;
+    case "models":
+      capabilities.add("models.switching");
+      break;
+    case "skills":
+      capabilities.add("skills.workspace");
+      break;
+    case "subagents":
+      capabilities.add("subagents.coordination");
+      break;
+    case "thread":
+      capabilities.add("threads.routing");
+      break;
+    case "workspace":
+      capabilities.add("workspace.mutation");
+      break;
+    default:
+      break;
   }
-  return [...capabilities].toSorted();
+  return requireKovaCapabilityIds([...capabilities].toSorted());
 }
 
 export function findMissingKovaQaScenarioIds(selectedIds: string[]) {

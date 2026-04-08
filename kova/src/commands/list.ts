@@ -1,5 +1,6 @@
 import { listKovaBackends, listKovaTargets } from "../backends/registry.js";
 import type { KovaRunTarget } from "../backends/types.js";
+import { listKovaCapabilities } from "../capabilities/registry.js";
 import { listKovaQaScenarios, summarizeKovaQaSurfaces } from "../catalog/qa.js";
 
 function parseListArgs(args: string[]) {
@@ -44,6 +45,15 @@ function renderSurfaceLines(target?: KovaRunTarget) {
     `Surfaces (${resolvedTarget}):`,
     ...summarizeKovaQaSurfaces().map(
       (surface) => `  - ${surface.surface}: ${surface.scenarioCount} scenario(s)`,
+    ),
+  ];
+}
+
+function renderCapabilityLines() {
+  return [
+    "Capabilities:",
+    ...listKovaCapabilities().map(
+      (capability) => `  - ${capability.id}: ${capability.title} [${capability.area}]`,
     ),
   ];
 }
@@ -117,9 +127,27 @@ export async function listCommand(args: string[]) {
     return;
   }
 
+  if (options.subject === "capabilities") {
+    if (options.json) {
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            capabilities: listKovaCapabilities(),
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      return;
+    }
+    process.stdout.write(`${renderCapabilityLines().join("\n")}\n`);
+    return;
+  }
+
   if (options.subject === "inventory") {
     const scenarioCount = listKovaQaScenarios().length;
     const surfaceCount = summarizeKovaQaSurfaces().length;
+    const capabilityCount = listKovaCapabilities().length;
     if (options.json) {
       process.stdout.write(
         `${JSON.stringify(
@@ -132,6 +160,9 @@ export async function listCommand(args: string[]) {
             qaCatalog: {
               scenarioCount,
               surfaceCount,
+            },
+            capabilityRegistry: {
+              count: capabilityCount,
             },
           },
           null,
@@ -146,6 +177,7 @@ export async function listCommand(args: string[]) {
       ...renderBackendLines(),
       "",
       `QA Catalog: ${scenarioCount} scenario(s) across ${surfaceCount} surface(s)`,
+      `Capability Registry: ${capabilityCount} capability id(s)`,
     ];
     process.stdout.write(`${lines.join("\n")}\n`);
     return;
