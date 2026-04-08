@@ -1,11 +1,24 @@
 import { multipassBackend } from "./multipass.js";
 import { qaBackend } from "./qa.js";
-import type { KovaBackend, KovaBackendId, KovaRunTarget } from "./types.js";
+import {
+  kovaRunTargets,
+  type KovaBackend,
+  type KovaBackendId,
+  type KovaRunTarget,
+} from "./types.js";
 
 const kovaBackends: KovaBackend[] = [qaBackend, multipassBackend];
 
+export function listKovaTargets() {
+  return [...kovaRunTargets];
+}
+
+export function listKovaBackends(target?: KovaRunTarget) {
+  return kovaBackends.filter((backend) => (target ? backend.supportsTarget(target) : true));
+}
+
 export function resolveKovaBackend(target: KovaRunTarget, backendId?: KovaBackendId) {
-  const backend = kovaBackends.find((candidate) => {
+  const backend = listKovaBackends(target).find((candidate) => {
     if (!candidate.supportsTarget(target)) {
       return false;
     }

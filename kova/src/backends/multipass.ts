@@ -7,6 +7,7 @@ import type { KovaBackend } from "./types.js";
 
 export const multipassBackend: KovaBackend = {
   id: "multipass",
+  title: "Multipass VM",
   supportsTarget(target): target is "qa" {
     return target === "qa";
   },
