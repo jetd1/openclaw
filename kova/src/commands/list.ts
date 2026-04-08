@@ -2,7 +2,7 @@ import { listKovaBackends, listKovaTargets } from "../backends/registry.js";
 import type { KovaRunTarget } from "../backends/types.js";
 import { listKovaCapabilities } from "../capabilities/registry.js";
 import { listKovaQaScenarios, summarizeKovaQaSurfaces } from "../catalog/qa.js";
-import { readKovaRunIndex } from "../lib/run-index.js";
+import { hydrateKovaRunIndex } from "../lib/run-index.js";
 
 function parseListArgs(args: string[]) {
   const json = args.includes("--json");
@@ -61,7 +61,7 @@ function renderCapabilityLines() {
 
 function renderRunLines(
   latestRunId: string | undefined,
-  runs: Awaited<ReturnType<typeof readKovaRunIndex>>["runs"],
+  runs: Awaited<ReturnType<typeof hydrateKovaRunIndex>>["runs"],
 ) {
   return [
     `Runs:${latestRunId ? ` latest=${latestRunId}` : ""}`,
@@ -79,7 +79,7 @@ export async function listCommand(repoRoot: string, args: string[]) {
   const options = parseListArgs(args);
 
   if (options.subject === "runs") {
-    const index = await readKovaRunIndex(repoRoot);
+    const index = await hydrateKovaRunIndex(repoRoot);
     if (options.json) {
       process.stdout.write(
         `${JSON.stringify(
@@ -181,7 +181,7 @@ export async function listCommand(repoRoot: string, args: string[]) {
   }
 
   if (options.subject === "inventory") {
-    const index = await readKovaRunIndex(repoRoot);
+    const index = await hydrateKovaRunIndex(repoRoot);
     const scenarioCount = listKovaQaScenarios().length;
     const surfaceCount = summarizeKovaQaSurfaces().length;
     const capabilityCount = listKovaCapabilities().length;
