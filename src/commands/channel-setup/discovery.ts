@@ -69,9 +69,13 @@ export function resolveChannelSetupEntries(params: {
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
 }): ResolvedChannelSetupEntries {
-  const workspaceDir = resolveWorkspaceDir(params.cfg, params.workspaceDir);
+  const resolvedConfig = applyPluginAutoEnable({
+    config: params.cfg,
+    env: params.env ?? process.env,
+  }).config;
+  const workspaceDir = resolveWorkspaceDir(resolvedConfig, params.workspaceDir);
   const manifestInstalledIds = listManifestInstalledChannelIds({
-    cfg: params.cfg,
+    cfg: resolvedConfig,
     workspaceDir,
     env: params.env,
   });
@@ -81,13 +85,32 @@ export function resolveChannelSetupEntries(params: {
     workspaceDir,
     excludeWorkspace: true,
   });
-  const installedCatalogEntries = catalogEntries.filter(
-    (entry) =>
-      !installedPluginIds.has(entry.id) &&
-      manifestInstalledIds.has(entry.id as ChannelChoice) &&
-      isTrustedWorkspaceChannelCatalogEntry(entry, params.cfg) &&
-      shouldShowChannelInSetup(entry.meta),
+  const nonWorkspaceCatalogById = new Map(
+    nonWorkspaceCatalogEntries.map((entry) => [entry.id, entry]),
   );
+  // Build installed entries from the full catalog so trusted workspace entries are included.
+  // When a workspace shadow is present but untrusted, fall back to the non-workspace entry
+  // for that channel so an already-installed non-workspace channel is not silently dropped.
+  const installedCatalogEntries: ChannelPluginCatalogEntry[] = [];
+  for (const entry of catalogEntries) {
+    if (
+      installedPluginIds.has(entry.id) ||
+      !manifestInstalledIds.has(entry.id as ChannelChoice) ||
+      !shouldShowChannelInSetup(entry.meta)
+    ) {
+      continue;
+    }
+    if (isTrustedWorkspaceChannelCatalogEntry(entry, resolvedConfig)) {
+      installedCatalogEntries.push(entry);
+    } else {
+      // Untrusted workspace shadow: use the non-workspace entry so the installed channel
+      // remains visible in setup instead of disappearing behind the shadow.
+      const fallback = nonWorkspaceCatalogById.get(entry.id);
+      if (fallback && shouldShowChannelInSetup(fallback.meta)) {
+        installedCatalogEntries.push(fallback);
+      }
+    }
+  }
   const installableCatalogEntries = nonWorkspaceCatalogEntries.filter(
     (entry) =>
       !installedPluginIds.has(entry.id) &&

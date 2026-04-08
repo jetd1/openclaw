@@ -153,7 +153,54 @@ describe("listManifestInstalledChannelIds", () => {
     expect(resolved.installableCatalogEntries).toEqual([]);
   });
 
-  it("filters untrusted workspace entries out of installed discovery results", () => {
+  it("filters untrusted workspace entries out of installed discovery results when no non-workspace fallback exists", () => {
+    loadPluginManifestRegistry.mockReturnValue({
+      plugins: [{ id: "matrix-plugin", channels: ["matrix"] }],
+      diagnostics: [],
+    });
+    listChannelPluginCatalogEntries.mockImplementation((args?: unknown) =>
+      (args as { excludeWorkspace?: boolean } | undefined)?.excludeWorkspace
+        ? [] // no bundled/global fallback for this workspace-only channel
+        : [
+            {
+              id: "matrix",
+              pluginId: "matrix-plugin",
+              origin: "workspace",
+              meta: {
+                id: "matrix",
+                label: "Matrix",
+                selectionLabel: "Matrix",
+                docsPath: "/channels/matrix",
+                blurb: "homeserver",
+              },
+            },
+          ],
+    );
+
+    const resolved = resolveChannelSetupEntries({
+      cfg: {} as never,
+      installedPlugins: [],
+      workspaceDir: "/tmp/workspace",
+      env: { OPENCLAW_HOME: "/tmp/home" } as NodeJS.ProcessEnv,
+    });
+
+    expect(resolved.installedCatalogEntries).toEqual([]);
+  });
+
+  it("keeps auto-enabled workspace entries in installed discovery results", () => {
+    const autoEnabledConfig = {
+      plugins: {
+        enabled: true,
+        allow: ["matrix-plugin"],
+      },
+    } as never;
+    applyPluginAutoEnable.mockImplementation(({ config }) => ({
+      config: config === autoEnabledConfig ? config : autoEnabledConfig,
+      changes: ["matrix-plugin"] as string[],
+      autoEnabledReasons: {
+        "matrix-plugin": ["matrix configured"],
+      },
+    }));
     loadPluginManifestRegistry.mockReturnValue({
       plugins: [{ id: "matrix-plugin", channels: ["matrix"] }],
       diagnostics: [],
@@ -180,7 +227,58 @@ describe("listManifestInstalledChannelIds", () => {
       env: { OPENCLAW_HOME: "/tmp/home" } as NodeJS.ProcessEnv,
     });
 
-    expect(resolved.installedCatalogEntries).toEqual([]);
+    expect(resolved.installedCatalogEntries.map((entry) => entry.id)).toEqual(["matrix"]);
+  });
+
+  it("falls back to non-workspace entry for installed channels with untrusted workspace shadow", () => {
+    loadPluginManifestRegistry.mockReturnValue({
+      plugins: [{ id: "@openclaw/telegram-plugin", channels: ["telegram"] }],
+      diagnostics: [],
+    });
+    listChannelPluginCatalogEntries.mockImplementation((args?: unknown) =>
+      (args as { excludeWorkspace?: boolean } | undefined)?.excludeWorkspace
+        ? [
+            {
+              id: "telegram",
+              pluginId: "@openclaw/telegram-plugin",
+              origin: "bundled",
+              meta: {
+                id: "telegram",
+                label: "Telegram",
+                selectionLabel: "Telegram",
+                docsPath: "/channels/telegram",
+                blurb: "bot token",
+              },
+            },
+          ]
+        : [
+            {
+              id: "telegram",
+              pluginId: "evil-telegram-plugin",
+              origin: "workspace",
+              meta: {
+                id: "telegram",
+                label: "Telegram",
+                selectionLabel: "Telegram",
+                docsPath: "/channels/telegram",
+                blurb: "bot token",
+              },
+            },
+          ],
+    );
+
+    const resolved = resolveChannelSetupEntries({
+      cfg: {} as never, // no plugins.allow → workspace plugin is untrusted
+      installedPlugins: [],
+      workspaceDir: "/tmp/workspace",
+      env: { OPENCLAW_HOME: "/tmp/home" } as NodeJS.ProcessEnv,
+    });
+
+    // Bundled entry must appear as installed; untrusted workspace shadow must not be used
+    expect(resolved.installedCatalogEntries.map((entry) => entry.pluginId)).toEqual([
+      "@openclaw/telegram-plugin",
+    ]);
+    expect(resolved.installableCatalogEntries).toEqual([]);
   });
 
   it("never offers workspace entries as installable setup options", () => {
