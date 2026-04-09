@@ -674,13 +674,13 @@ describe("active-memory plugin", () => {
     runEmbeddedPiAgent.mockResolvedValueOnce({
       payloads: [
         {
-          text: "- lemon pepper wings with extra crisp skin\n- blue cheese dressing on the side",
+          text: "alpha beta gamma delta epsilon zetalongword",
         },
       ],
     });
 
     const result = await hooks.before_prompt_build(
-      { prompt: "what wings should i order?", messages: [] },
+      { prompt: "what wings should i order? word-boundary-truncation-40", messages: [] },
       {
         agentId: "main",
         trigger: "user",
@@ -691,10 +691,16 @@ describe("active-memory plugin", () => {
 
     expect(result).toEqual({
       prependSystemContext: expect.stringContaining("plugin-provided supplemental context"),
-      appendSystemContext: expect.stringContaining("lemon pepper wings"),
+      appendSystemContext: expect.stringContaining("alpha beta gamma"),
     });
+    expect((result as { appendSystemContext: string }).appendSystemContext).toContain(
+      "alpha beta gamma delta epsilon",
+    );
     expect((result as { appendSystemContext: string }).appendSystemContext).not.toContain(
-      "dressing on the side",
+      "zetalo",
+    );
+    expect((result as { appendSystemContext: string }).appendSystemContext).not.toContain(
+      "zetalongword",
     );
   });
 

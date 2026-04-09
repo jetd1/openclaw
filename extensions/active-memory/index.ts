@@ -580,7 +580,23 @@ function normalizeActiveSummary(rawReply: string): string | null {
 }
 
 function truncateSummary(summary: string, maxSummaryChars: number): string {
-  return summary.slice(0, maxSummaryChars).trim();
+  const trimmed = summary.trim();
+  if (trimmed.length <= maxSummaryChars) {
+    return trimmed;
+  }
+
+  const bounded = trimmed.slice(0, maxSummaryChars).trimEnd();
+  const nextChar = trimmed.charAt(maxSummaryChars);
+  if (!nextChar || /\s/.test(nextChar)) {
+    return bounded;
+  }
+
+  const lastBoundary = bounded.search(/\s\S*$/);
+  if (lastBoundary > 0) {
+    return bounded.slice(0, lastBoundary).trimEnd();
+  }
+
+  return bounded;
 }
 
 function buildMetadata(summary: string | null): string | undefined {
