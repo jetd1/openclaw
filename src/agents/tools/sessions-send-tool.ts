@@ -87,7 +87,7 @@ export function createSessionsSendTool(opts?: {
     displaySummary: SESSIONS_SEND_TOOL_DISPLAY_SUMMARY,
     description: describeSessionsSendTool(),
     parameters: SessionsSendToolSchema,
-    execute: async (_toolCallId, args) => {
+    execute: async (_toolCallId, args, signal) => {
       const params = args as Record<string, unknown>;
       const gatewayCall = opts?.callGateway ?? callGateway;
       const message = readStringParam(params, "message", { required: true });
@@ -333,7 +333,10 @@ export function createSessionsSendTool(opts?: {
         return start.result;
       }
       runId = start.runId;
-      const result = await waitForAgentRunAndReadUpdatedAssistantReply({
+
+      // Race the agent wait with the abort signal so the tool returns
+      // partial results when the parent run is interrupted/steered.
+      const waitPromise = waitForAgentRunAndReadUpdatedAssistantReply({
         runId,
         sessionKey: resolvedKey,
         timeoutMs,
@@ -341,33 +344,65 @@ export function createSessionsSendTool(opts?: {
         baseline: baselineReply,
         callGateway: gatewayCall,
       });
+      type AbortedResult = { status: "aborted" };
+      let abortPromise: Promise<AbortedResult> | null = null;
+      let cleanupAbortListener: (() => void) | null = null;
+      if (signal) {
+        if (signal.aborted) {
+          abortPromise = Promise.resolve({ status: "aborted" } satisfies AbortedResult);
+        } else {
+          abortPromise = new Promise<AbortedResult>((resolve) => {
+            const handler = () => resolve({ status: "aborted" });
+            signal.addEventListener("abort", handler, { once: true });
+            cleanupAbortListener = () => signal.removeEventListener("abort", handler);
+          });
+        }
+      }
+      try {
+        const result = abortPromise
+          ? await Promise.race([waitPromise, abortPromise])
+          : await waitPromise;
 
-      if (result.status === "timeout") {
+        if (result.status === "aborted") {
+          // The parent run was interrupted.  The child run is still executing
+          // in the background; return what we know so the model can decide.
+          return jsonResult({
+            runId,
+            status: "interrupted",
+            note: "Parent run was interrupted. Child run continues in background.",
+            sessionKey: displayKey,
+          });
+        }
+
+        if (result.status === "timeout") {
+          return jsonResult({
+            runId,
+            status: "timeout",
+            error: result.error,
+            sessionKey: displayKey,
+          });
+        }
+        if (result.status === "error") {
+          return jsonResult({
+            runId,
+            status: "error",
+            error: result.error ?? "agent error",
+            sessionKey: displayKey,
+          });
+        }
+        const reply = result.replyText;
+        startA2AFlow(reply ?? undefined);
+
         return jsonResult({
           runId,
-          status: "timeout",
-          error: result.error,
+          status: "ok",
+          reply,
           sessionKey: displayKey,
+          delivery,
         });
+      } finally {
+        (cleanupAbortListener as (() => void) | null)?.();
       }
-      if (result.status === "error") {
-        return jsonResult({
-          runId,
-          status: "error",
-          error: result.error ?? "agent error",
-          sessionKey: displayKey,
-        });
-      }
-      const reply = result.replyText;
-      startA2AFlow(reply ?? undefined);
-
-      return jsonResult({
-        runId,
-        status: "ok",
-        reply,
-        sessionKey: displayKey,
-        delivery,
-      });
     },
   };
 }

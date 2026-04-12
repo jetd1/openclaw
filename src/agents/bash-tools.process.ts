@@ -151,7 +151,7 @@ export function createProcessTool(
     displaySummary: PROCESS_TOOL_DISPLAY_SUMMARY,
     description: describeProcessTool({ hasCronTool: defaults?.hasCronTool === true }),
     parameters: processSchema,
-    execute: async (_toolCallId, args, _signal, _onUpdate): Promise<AgentToolResult<unknown>> => {
+    execute: async (_toolCallId, args, signal, _onUpdate): Promise<AgentToolResult<unknown>> => {
       const params = args as {
         action:
           | "list"
@@ -328,10 +328,32 @@ export function createProcessTool(
           const pollWaitMs = resolvePollWaitMs(params.timeout);
           if (pollWaitMs > 0 && !scopedSession.exited) {
             const deadline = Date.now() + pollWaitMs;
-            while (!scopedSession.exited && Date.now() < deadline) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, Math.max(0, Math.min(250, deadline - Date.now()))),
-              );
+            let abortWaker: (() => void) | null = null;
+            const onAbort = () => {
+              if (abortWaker) {
+                abortWaker();
+                abortWaker = null;
+              }
+            };
+            signal?.addEventListener("abort", onAbort, { once: true });
+            try {
+              while (!scopedSession.exited && Date.now() < deadline) {
+                // Check abort outside the promise to exit the loop immediately
+                // without waiting for the next 250ms tick.
+                if (signal?.aborted) {
+                  break;
+                }
+                await new Promise<void>((resolve) => {
+                  const sleepMs = Math.max(0, Math.min(250, deadline - Date.now()));
+                  const timer = setTimeout(resolve, sleepMs);
+                  abortWaker = () => {
+                    clearTimeout(timer);
+                    resolve();
+                  };
+                });
+              }
+            } finally {
+              signal?.removeEventListener("abort", onAbort);
             }
           }
           const { stdout, stderr } = drainSession(scopedSession);
