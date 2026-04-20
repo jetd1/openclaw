@@ -743,6 +743,14 @@ export function buildBuiltinChatCommands(
       ],
     }),
     defineChatCommand({
+      key: "flush",
+      nativeName: "flush",
+      description: "Manually flush session memory (without compacting).",
+      textAlias: "/flush",
+      category: "session",
+      tier: "standard",
+    }),
+    defineChatCommand({
       key: "think",
       nativeName: "think",
       description: "Set thinking level.",

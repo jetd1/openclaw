@@ -57,6 +57,7 @@ function getReservedCommands(): Set<string> {
     "verbose",
     "reasoning",
     "elevated",
+    "flush",
     "usage",
   ]);
   return reservedCommands;
