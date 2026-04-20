@@ -6,6 +6,7 @@ import {
   resolveAgentSkillsFilter,
 } from "../../agents/agent-scope.js";
 import { resolveModelRefFromString } from "../../agents/model-selection.js";
+import { resolveEmbeddedFullAccessState } from "../../agents/pi-embedded-runner/sandbox-info.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../agents/workspace.js";
 import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
@@ -555,6 +556,15 @@ export async function getReplyFromConfig(
     directiveAck,
     abortedLastRun,
     skillFilter: mergedSkillFilter,
+    execOverrides,
+    fullAccessState: resolveEmbeddedFullAccessState({
+      execElevated: {
+        enabled: elevatedEnabled,
+        allowed: elevatedAllowed,
+        defaultLevel: resolvedElevatedLevel ?? "off",
+      },
+    }),
+    useFastReplyRuntime: useFastTestRuntime,
   });
   if (inlineActionResult.kind === "reply") {
     await maybeEmitMissingResetHooks();

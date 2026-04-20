@@ -6,6 +6,7 @@ import { handleBtwCommand } from "./commands-btw.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
 import { handleContextCommand } from "./commands-context-command.js";
+import { handleFlushCommand } from "./commands-flush.js";
 import {
   handleCommandsListCommand,
   handleExportSessionCommand,
@@ -64,6 +65,7 @@ export function loadCommandHandlers(): CommandHandler[] {
     handleModelsCommand,
     handleStopCommand,
     handleCompactCommand,
+    handleFlushCommand,
     handleAbortTrigger,
   ];
 }

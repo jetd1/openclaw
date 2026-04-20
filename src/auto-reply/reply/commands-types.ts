@@ -1,3 +1,4 @@
+import type { ExecToolDefaults } from "../../agents/bash-tools.exec-types.js";
 import type { BlockReplyChunking } from "../../agents/pi-embedded-block-chunker.js";
 import type { SkillCommandSpec } from "../../agents/skills.js";
 import type { ChannelId } from "../../channels/plugins/types.public.js";
@@ -57,6 +58,11 @@ export type HandleCommandsParams = {
   resolveDefaultThinkingLevel: () => Promise<ThinkLevel | undefined>;
   provider: string;
   model: string;
+  execOverrides?: Pick<ExecToolDefaults, "host" | "security" | "ask" | "node">;
+  /** Session's assembled extra system prompt (AGENTS.md, meta context, etc.),
+   *  passed through to embedded runs so policy guidance is consistent with the
+   *  auto memory-flush path.  Undefined when the caller cannot provide it. */
+  extraSystemPrompt?: string;
   contextTokens: number;
   isGroup: boolean;
   skillCommands?: SkillCommandSpec[];

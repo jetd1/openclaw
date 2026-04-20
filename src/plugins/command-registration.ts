@@ -73,6 +73,7 @@ export function validateCommandName(name: string): string | null {
     "verbose",
     "reasoning",
     "elevated",
+    "flush",
     "usage",
   ]);
 

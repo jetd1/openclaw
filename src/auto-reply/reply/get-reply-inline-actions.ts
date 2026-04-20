@@ -19,6 +19,7 @@ import {
 } from "../skill-commands-base.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "../thinking.js";
+import { SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import {
   readAbortCutoffFromSessionEntry,
@@ -80,6 +81,7 @@ function getBuiltinSlashCommands(): Set<string> {
     "model",
     "status",
     "queue",
+    "flush",
   ]);
   return builtinSlashCommands;
 }
@@ -180,6 +182,12 @@ export async function handleInlineActions(params: {
   directiveAck?: ReplyPayload;
   abortedLastRun: boolean;
   skillFilter?: string[];
+  execOverrides?: Record<string, string>;
+  fullAccessState?: {
+    available: boolean;
+    blockedReason?: import("../../agents/pi-embedded-runner/types.js").EmbeddedFullAccessBlockedReason;
+  };
+  useFastReplyRuntime?: boolean;
 }): Promise<InlineActionResult> {
   const {
     ctx,
@@ -219,7 +227,9 @@ export async function handleInlineActions(params: {
     directiveAck,
     abortedLastRun: initialAbortedLastRun,
     skillFilter,
+    execOverrides,
   } = params;
+  const fullAccessState = params.fullAccessState ?? { available: false };
 
   let directives = initialDirectives;
   let cleanedBody = initialCleanedBody;
@@ -415,6 +425,42 @@ export async function handleInlineActions(params: {
 
   const runCommands = async (commandInput: typeof command) => {
     const { handleCommands } = await loadCommandsRuntime();
+    // Build the same assembled extraSystemPrompt that normal turns get, using
+    // the shared builder from extra-system-prompt.ts. This ensures policy
+    // context (inbound meta, group guidance, exec overrides) is available to
+    // embedded runs dispatched by command handlers (e.g. /flush).
+    const { buildExtraSystemPrompt } = await import("./extra-system-prompt.js");
+    const { buildGroupChatContext, buildGroupIntro } = await import("./groups.js");
+    // Match the normal-turn group-prompt gating: groupChatContext is always
+    // included for groups (name, participants, reply guidance), but groupIntro
+    // (activation mode, lurking instructions) is only included on the first
+    // turn or when groupActivationNeedsSystemIntro is set.
+    const groupChatContext = isGroup ? buildGroupChatContext({ sessionCtx }) : undefined;
+    const shouldInjectGroupIntro = Boolean(
+      isGroup && targetSessionEntry?.groupActivationNeedsSystemIntro,
+    );
+    const groupIntro = shouldInjectGroupIntro
+      ? buildGroupIntro({
+          sessionCtx,
+          sessionEntry: targetSessionEntry,
+          cfg,
+          defaultActivation: defaultActivation(),
+          silentToken: SILENT_REPLY_TOKEN,
+        })
+      : undefined;
+    const commandExtraSystemPrompt = buildExtraSystemPrompt({
+      rootCtx: ctx,
+      sessionCtx,
+      cfg,
+      isNewSession: false,
+      useFastReplyRuntime: params.useFastReplyRuntime ?? false,
+      execOverrides,
+      resolvedElevatedLevel,
+      fullAccessAvailable: fullAccessState.available,
+      fullAccessBlockedReason: fullAccessState.blockedReason,
+      groupChatContext,
+      groupIntro,
+    });
     return handleCommands({
       // Pass sessionCtx so command handlers can mutate stripped body for same-turn continuation.
       ctx: sessionCtx,
@@ -448,8 +494,10 @@ export async function handleInlineActions(params: {
       resolveDefaultThinkingLevel,
       provider,
       model,
+      execOverrides,
       contextTokens,
       isGroup,
+      extraSystemPrompt: commandExtraSystemPrompt,
       skillCommands,
       typing,
     });
