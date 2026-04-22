@@ -75,8 +75,28 @@ export async function resolveGatewayProbeSurfaceAuth(params: {
     });
   }
 
-  if (authMode === "none" || authMode === "trusted-proxy") {
+  if (authMode === "none") {
     return {};
+  }
+
+  if (authMode === "trusted-proxy") {
+    // Trusted-proxy normally needs no local credentials, but a configured
+    // password (config, secret ref, or OPENCLAW_GATEWAY_PASSWORD) can
+    // serve as a loopback fallback. Resolve it for probe/status flows so
+    // they can authenticate.
+    const envPassword = trimToUndefined(env.OPENCLAW_GATEWAY_PASSWORD);
+    const password = await resolveGatewayCredential({
+      config: params.config,
+      env,
+      diagnostics,
+      path: "gateway.auth.password",
+      value: params.config.gateway?.auth?.password,
+    });
+    const resolved = password.value ?? envPassword;
+    return withDiagnostics({
+      diagnostics,
+      result: resolved ? { password: resolved } : {},
+    });
   }
 
   const envToken = trimToUndefined(env.OPENCLAW_GATEWAY_TOKEN);
@@ -196,10 +216,30 @@ export async function resolveGatewayInteractiveSurfaceAuth(params: {
   }
 
   const authMode = params.config.gateway?.auth?.mode;
-  if (authMode === "none" || authMode === "trusted-proxy") {
+  if (authMode === "none") {
     return {
       token: explicitToken ?? envToken,
       password: explicitPassword ?? envPassword,
+    };
+  }
+  if (authMode === "trusted-proxy") {
+    // Match the precedence used by other auth modes below: explicit
+    // auth > env > config-resolved secret. This matters when the gateway
+    // is started with a service-managed OPENCLAW_GATEWAY_PASSWORD that
+    // differs from the config value (e.g. stale/plaintext placeholder).
+    const localPassword =
+      explicitPassword || envPassword
+        ? { value: undefined }
+        : await resolveGatewayCredential({
+            config: params.config,
+            env,
+            diagnostics,
+            path: "gateway.auth.password",
+            value: params.config.gateway?.auth?.password,
+          });
+    return {
+      token: explicitToken ?? envToken,
+      password: explicitPassword ?? envPassword ?? localPassword.value,
     };
   }
 

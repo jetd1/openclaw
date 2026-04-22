@@ -252,6 +252,17 @@ function resolvePairingSetupAuthLabel(
     }
     return { label: "token" };
   }
+  if (mode === "trusted-proxy") {
+    // Trusted-proxy auth normally relies on the reverse proxy to set the
+    // user header. Mobile pairing uses an independent bootstrap token
+    // path, so the QR setup does not require a shared secret here — an
+    // optional fallback password just changes the label shown to the
+    // user.
+    if (password) {
+      return { label: "password" };
+    }
+    return { label: "token" };
+  }
   if (token) {
     return { label: "token" };
   }

@@ -108,9 +108,15 @@ function resolveLocalGatewayCredentials(params: {
   const fallbackToken = params.plan.localToken.configured
     ? params.plan.localToken.value
     : params.plan.remoteToken.value;
+  // In trusted-proxy mode, never fall back to `gateway.remote.password` for
+  // local auth — only `gateway.auth.password` is a valid local credential.
+  // Mirrors the symmetric zero-out in `resolveRemoteGatewayCredentials` that
+  // prevents `gateway.auth.password` from being forwarded to a remote gateway.
+  const remotePasswordForLocal =
+    params.plan.authMode === "trusted-proxy" ? undefined : params.plan.remotePassword.value;
   const fallbackPassword = params.plan.localPassword.configured
     ? params.plan.localPassword.value
-    : params.plan.remotePassword.value;
+    : remotePasswordForLocal;
   const localResolved = resolveGatewayCredentialsFromValues({
     configToken: fallbackToken,
     configPassword: fallbackPassword,
@@ -120,6 +126,7 @@ function resolveLocalGatewayCredentials(params: {
   });
   const localPasswordCanWin =
     params.plan.authMode === "password" ||
+    (params.plan.authMode === "trusted-proxy" && params.plan.localPassword.configured) ||
     (params.plan.authMode !== "token" &&
       params.plan.authMode !== "none" &&
       params.plan.authMode !== "trusted-proxy" &&
@@ -175,6 +182,13 @@ function resolveRemoteGatewayCredentials(params: {
   remoteTokenFallback: GatewayRemoteCredentialFallback;
   remotePasswordFallback: GatewayRemoteCredentialFallback;
 }): ResolvedGatewayCredentials {
+  // In trusted-proxy mode, `gateway.auth.password` is a loopback-only
+  // fallback for local clients (subagents, browser extensions). It must
+  // never be forwarded to a remote gateway, which will reject non-local
+  // password auth anyway. Zero out the local password here so every
+  // remote fallback path below treats it as absent.
+  const localPasswordForRemote =
+    params.plan.authMode === "trusted-proxy" ? undefined : params.plan.localPassword.value;
   const token =
     params.remoteTokenFallback === "remote-only"
       ? params.plan.remoteToken.value
@@ -196,18 +210,18 @@ function resolveRemoteGatewayCredentials(params: {
         ? firstDefined([
             params.plan.envPassword,
             params.plan.remotePassword.value,
-            params.plan.localPassword.value,
+            localPasswordForRemote,
           ])
         : firstDefined([
             params.plan.remotePassword.value,
             params.plan.envPassword,
-            params.plan.localPassword.value,
+            localPasswordForRemote,
           ]);
   const localTokenFallbackEnabled = params.remoteTokenFallback !== "remote-only";
   const localTokenFallback =
     params.remoteTokenFallback === "remote-only" ? undefined : params.plan.localToken.value;
   const localPasswordFallback =
-    params.remotePasswordFallback === "remote-only" ? undefined : params.plan.localPassword.value; // pragma: allowlist secret
+    params.remotePasswordFallback === "remote-only" ? undefined : localPasswordForRemote; // pragma: allowlist secret
 
   if (
     params.plan.remoteToken.refPath &&

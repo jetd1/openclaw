@@ -42,8 +42,13 @@ export function shouldResolveGatewayAuthSecretRef(params: {
   if (params.mode === (isTokenPath ? "token" : "password")) {
     return true;
   }
-  if (params.mode === "token" || params.mode === "none" || params.mode === "trusted-proxy") {
+  if (params.mode === "token" || params.mode === "none") {
     return false;
+  }
+  // trusted-proxy mode: token refs are never resolved (mutually exclusive),
+  // but password refs should be resolved so the local fallback works.
+  if (params.mode === "trusted-proxy") {
+    return !isTokenPath;
   }
   if (params.mode === "password") {
     return !isTokenPath;
