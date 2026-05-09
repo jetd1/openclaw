@@ -220,7 +220,6 @@ export async function ensureGatewayStartupAuth(params: {
     persistedGeneratedToken: false,
   };
 }
-
 export function assertHooksTokenSeparateFromGatewayAuth(params: {
   cfg: OpenClawConfig;
   auth: ResolvedGatewayAuth;

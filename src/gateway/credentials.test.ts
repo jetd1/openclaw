@@ -192,6 +192,24 @@ describe("resolveGatewayCredentialsFromConfig", () => {
     });
   });
 
+  it("does not fall back to remote.password for local auth in trusted-proxy mode", () => {
+    // trusted-proxy is the reverse of the normal fallback: gateway.remote.password
+    // is remote-only credential material and must not leak into local loopback
+    // auth even when gateway.auth.password is unconfigured. Otherwise a local
+    // client would present the wrong secret and burn rate-limit slots.
+    const resolved = resolveGatewayCredentialsFromConfig({
+      cfg: cfg({
+        gateway: {
+          mode: "local",
+          auth: { mode: "trusted-proxy" },
+          remote: { password: "remote-password" }, // pragma: allowlist secret
+        },
+      }),
+      env: {} as NodeJS.ProcessEnv,
+    });
+    expect(resolved.password).toBeUndefined();
+  });
+
   it("fails closed when local token SecretRef is unresolved and remote token fallback exists", () => {
     expectUnresolvedLocalAuthSecretRefFailure({
       authMode: "token",

@@ -36,7 +36,10 @@ export function assertGatewayAuthNotKnownWeak(auth: ResolvedGatewayAuth): void {
     }
     return;
   }
-  if (auth.mode === "password") {
+  // Password is also a valid credential in trusted-proxy mode (loopback
+  // fallback for subagents / browser extensions), so the same
+  // weak-placeholder rejection must apply there too.
+  if (auth.mode === "password" || auth.mode === "trusted-proxy") {
     const password = auth.password?.trim() ?? "";
     if (password && KNOWN_WEAK_GATEWAY_PASSWORDS.has(password)) {
       throw new Error(

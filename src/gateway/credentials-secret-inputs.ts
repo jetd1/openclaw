@@ -116,7 +116,11 @@ function localAuthModeAllowsGatewaySecretInputPath(params: {
     return false;
   }
   if (authMode === "trusted-proxy") {
-    return !isTokenGatewaySecretInputPath(path);
+    // Token is mutually exclusive with trusted-proxy, but password is not:
+    // the browser extension auto-generates a password for loopback clients.
+    // Only gateway.auth.password is valid for local trusted-proxy auth;
+    // gateway.remote.password must not be resolved as a local credential.
+    return path === "gateway.auth.password";
   }
   if (authMode === "token") {
     return isTokenGatewaySecretInputPath(path);

@@ -1630,7 +1630,10 @@ describe("callGateway password resolution", () => {
       },
     } as unknown as OpenClawConfig);
 
-    await expect(callGateway({ method: "health" })).rejects.toThrow("gateway.auth.password");
+    await callGateway({ method: "health" });
+
+    expect(lastClientOptions?.token).toBeUndefined();
+    expect(lastClientOptions?.password).toBe("auto-generated-browser-secret");
   });
 
   it("does not resolve local password ref when remote password is already configured", async () => {
@@ -1833,12 +1836,12 @@ describe("callGateway password resolution", () => {
     expect(lastClientOptions?.password).toBeUndefined();
   });
 
-  it("does not resolve remote refs on non-remote gateway calls when auth mode is trusted-proxy", async () => {
+  it("does not resolve remote token refs on non-remote gateway calls when auth mode is trusted-proxy", async () => {
     getRuntimeConfig.mockReturnValue({
       gateway: {
         mode: "local",
         bind: "loopback",
-        auth: { mode: "trusted-proxy" },
+        auth: { mode: "trusted-proxy", trustedProxy: { userHeader: "x-forwarded-user" } },
         remote: {
           url: "wss://remote.example:18789",
           token: { source: "env", provider: "default", id: "MISSING_REMOTE_TOKEN" },
@@ -1854,6 +1857,9 @@ describe("callGateway password resolution", () => {
 
     await callGateway({ method: "health" });
 
+    // Token is still mutually exclusive with trusted-proxy, so remote token ref should not resolve.
+    // But remote password ref should not resolve either — local password resolution for
+    // trusted-proxy only applies to the local (gateway.auth.password) path.
     expect(lastClientOptions?.token).toBeUndefined();
     expect(lastClientOptions?.password).toBeUndefined();
   });
