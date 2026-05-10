@@ -1630,10 +1630,7 @@ describe("callGateway password resolution", () => {
       },
     } as unknown as OpenClawConfig);
 
-    await callGateway({ method: "health" });
-
-    expect(lastClientOptions?.token).toBeUndefined();
-    expect(lastClientOptions?.password).toBe("auto-generated-browser-secret");
+    await expect(callGateway({ method: "health" })).rejects.toThrow("gateway.auth.password");
   });
 
   it("does not resolve local password ref when remote password is already configured", async () => {
