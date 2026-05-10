@@ -50,10 +50,7 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
 function readU32LE(data: Uint8Array, offset: number): bigint {
   return (
     BigInt(
-      data[offset] |
-        (data[offset + 1] << 8) |
-        (data[offset + 2] << 16) |
-        (data[offset + 3] << 24),
+      data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24),
     ) & 0xffffffffn
   );
 }
@@ -244,6 +241,10 @@ for (const [orig, obfuscated] of Object.entries(TOOL_NAME_OBFUSCATION_MAP)) {
   TOOL_NAME_RESTORE_MAP[obfuscated] = orig;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Obfuscate tool names in the request payload.
  * Mutates the tools array in place.
@@ -255,12 +256,23 @@ export function obfuscateToolNames(payload: Record<string, unknown>): void {
   }
   for (const tool of tools) {
     if (tool && typeof tool === "object" && typeof tool.name === "string") {
-      const obfuscated = TOOL_NAME_OBFUSCATION_MAP[tool.name];
-      if (obfuscated) {
-        tool.name = obfuscated;
-      }
+      tool.name = obfuscateToolName(tool.name);
     }
   }
+}
+
+/**
+ * Obfuscate one canonical tool name.
+ */
+export function obfuscateToolName(name: string): string {
+  return TOOL_NAME_OBFUSCATION_MAP[name] ?? name;
+}
+
+/**
+ * Restore one obfuscated tool name.
+ */
+export function restoreToolName(name: string): string {
+  return TOOL_NAME_RESTORE_MAP[name] ?? name;
 }
 
 /**
@@ -269,8 +281,11 @@ export function obfuscateToolNames(payload: Record<string, unknown>): void {
 export function restoreToolNamesInResponse(responseText: string): string {
   let result = responseText;
   for (const [obfuscated, original] of Object.entries(TOOL_NAME_RESTORE_MAP)) {
-    // Replace in JSON tool_use name fields
-    result = result.replaceAll(`"name":"${obfuscated}"`, `"name":"${original}"`);
+    // Replace JSON tool_use name fields, preserving compact and pretty JSON.
+    result = result.replace(
+      new RegExp(`("name"\\s*:\\s*)"${escapeRegExp(obfuscated)}"`, "g"),
+      `$1"${original}"`,
+    );
   }
   return result;
 }

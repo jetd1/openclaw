@@ -1,5 +1,7 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAnthropicBypassDetectionWrapper } from "./bypass-detection.js";
+import { restoreToolName, restoreToolNamesInResponse } from "./cch-signer.js";
 import {
   __testing,
   createAnthropicBetaHeadersWrapper,
@@ -11,6 +13,7 @@ import {
 
 const CONTEXT_1M_BETA = "context-1m-2025-08-07";
 const OAUTH_BETA = "oauth-2025-04-20";
+const ORIGINAL_FETCH = globalThis.fetch;
 
 function runWrapper(apiKey: string | undefined): Record<string, string> | undefined {
   const captured: { headers?: Record<string, string> } = {};
@@ -38,6 +41,24 @@ function createPayloadCapturingBaseStream(captured: {
     captured.payload = payload;
     return {} as never;
   };
+}
+
+function createMessageStream(message: unknown): ReturnType<StreamFn> {
+  return {
+    async result() {
+      return message;
+    },
+    async *[Symbol.asyncIterator]() {
+      yield { partial: message };
+      yield { message };
+    },
+  } as unknown as ReturnType<StreamFn>;
+}
+
+function firstToolCallName(message: unknown): string | undefined {
+  const content = (message as { content?: Array<{ name?: unknown }> }).content;
+  const name = content?.[0]?.name;
+  return typeof name === "string" ? name : undefined;
 }
 
 function runComposedAnthropicProviderStream(apiKey: string) {
@@ -83,6 +104,7 @@ function runPayloadWrapper(
 describe("anthropic stream wrappers", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    globalThis.fetch = ORIGINAL_FETCH;
   });
 
   it("strips context-1m for Claude CLI or legacy token auth and warns", () => {
@@ -111,6 +133,62 @@ describe("anthropic stream wrappers", () => {
     const captured = runComposedAnthropicProviderStream("sk-ant-api-123");
     expect(captured.headers?.["anthropic-beta"]).toContain(CONTEXT_1M_BETA);
     expect(captured.payload).toMatchObject({ service_tier: "auto" });
+  });
+
+  it("restores bypass-obfuscated tool names in parsed native stream messages", async () => {
+    const message = {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "toolu_1", name: "__sess_status", arguments: {} }],
+    };
+    const captured: { payload?: Record<string, unknown> } = {};
+    const base: StreamFn = (model, _context, options) => {
+      const payload = {
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "toolu_replay_1", name: "session_status" }],
+          },
+          {
+            role: "assistant",
+            content: [{ type: "toolCall", id: "toolu_replay_2", name: "memory_get" }],
+          },
+          { role: "user", content: "status?" },
+        ],
+        tools: [{ name: "session_status" }, { name: "memory_get" }],
+      };
+      options?.onPayload?.(payload as never, model as never);
+      captured.payload = payload;
+      return createMessageStream(message);
+    };
+    const wrapper = createAnthropicBypassDetectionWrapper(base, true);
+    const stream = await Promise.resolve(
+      wrapper({ provider: "anthropic", id: "claude-sonnet-4-6" } as never, {} as never, {}),
+    );
+
+    expect(
+      (captured.payload?.tools as Array<{ name: string }> | undefined)?.map((t) => t.name),
+    ).toEqual(["__sess_status", "__mem_get"]);
+    const replayMessages = captured.payload?.messages as
+      | Array<{ content?: Array<{ name?: string }> }>
+      | undefined;
+    expect(replayMessages?.[0]?.content?.[0]?.name).toBe("__sess_status");
+    expect(replayMessages?.[1]?.content?.[0]?.name).toBe("__mem_get");
+
+    const iterator = stream[Symbol.asyncIterator]();
+    const firstEvent = await iterator.next();
+    expect(firstToolCallName((firstEvent.value as { partial?: unknown }).partial)).toBe(
+      "session_status",
+    );
+    expect(firstToolCallName(await stream.result())).toBe("session_status");
+  });
+
+  it("restores bypass-obfuscated tool names in raw SSE lines", () => {
+    expect(restoreToolName("__sess_status")).toBe("session_status");
+    expect(
+      restoreToolNamesInResponse(
+        'data: {"content_block":{"type":"tool_use","name": "__sess_status"}}',
+      ),
+    ).toContain('"name": "session_status"');
   });
 });
 

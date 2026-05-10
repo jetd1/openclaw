@@ -12,6 +12,7 @@
 
 import type { StreamFn } from "@mariozechner/pi-agent-core";
 import { streamSimple } from "@mariozechner/pi-ai";
+import { wrapStreamMessageObjects } from "openclaw/plugin-sdk/provider-stream-shared";
 import {
   computeVersionSuffix,
   buildBillingHeaderPlaceholder,
@@ -19,7 +20,9 @@ import {
   MAX_SYSTEM_PROMPT_CHARS,
   CCH_PLACEHOLDER,
   CCH_VERSION,
+  obfuscateToolName,
   obfuscateToolNames,
+  restoreToolName,
   restoreToolNamesInResponse,
 } from "./cch-signer.js";
 
@@ -88,6 +91,59 @@ export function splitSystemBlocks(systemBlocks: Array<Record<string, unknown>>):
   };
 }
 
+function restoreToolNamesInMessage(message: unknown): void {
+  if (!message || typeof message !== "object") {
+    return;
+  }
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) {
+    return;
+  }
+
+  for (const block of content) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+    const toolCall = block as { type?: unknown; name?: unknown };
+    if (toolCall.type === "toolCall" && typeof toolCall.name === "string") {
+      toolCall.name = restoreToolName(toolCall.name);
+    }
+  }
+}
+
+function wrapStreamWithToolNameRestore(stream: ReturnType<typeof streamSimple>) {
+  return wrapStreamMessageObjects(stream, restoreToolNamesInMessage);
+}
+
+function obfuscateReplayedToolNamesInMessages(payload: Record<string, unknown>): void {
+  const messages = payload.messages;
+  if (!Array.isArray(messages)) {
+    return;
+  }
+
+  for (const message of messages) {
+    if (!message || typeof message !== "object") {
+      continue;
+    }
+    const content = (message as { content?: unknown }).content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const block of content) {
+      if (!block || typeof block !== "object") {
+        continue;
+      }
+      const toolBlock = block as { type?: unknown; name?: unknown };
+      if (
+        (toolBlock.type === "tool_use" || toolBlock.type === "toolCall") &&
+        typeof toolBlock.name === "string"
+      ) {
+        toolBlock.name = obfuscateToolName(toolBlock.name);
+      }
+    }
+  }
+}
+
 /**
  * Create the bypass detection stream wrapper.
  *
@@ -116,7 +172,10 @@ export function createAnthropicBypassDetectionWrapper(
     // betas, which is a functional regression when bypass is combined with
     // other capabilities.
     const existingBetas = patchedHeaders["anthropic-beta"]
-      ? String(patchedHeaders["anthropic-beta"]).split(",").map((b) => b.trim()).filter(Boolean)
+      ? patchedHeaders["anthropic-beta"]
+          .split(",")
+          .map((b) => b.trim())
+          .filter(Boolean)
       : [];
     const mergedBetas = new Set([...existingBetas, ...BYPASS_ANTHROPIC_BETAS]);
     patchedHeaders["anthropic-beta"] = [...mergedBetas].join(",");
@@ -253,7 +312,11 @@ export function createAnthropicBypassDetectionWrapper(
     // leaks.  Guard against that edge case by wrapping only the sync
     // throw path.
     try {
-      return underlying(model, context, bypassOptions);
+      const maybeStream = underlying(model, context, bypassOptions);
+      if (maybeStream && typeof maybeStream === "object" && "then" in maybeStream) {
+        return Promise.resolve(maybeStream).then(wrapStreamWithToolNameRestore);
+      }
+      return wrapStreamWithToolNameRestore(maybeStream);
     } catch (syncErr) {
       // Sync throw before the stream started — restore the patch.
       if (cchFetchActive) {
@@ -314,7 +377,8 @@ function patchPayloadForBypass(payload: Record<string, unknown>): void {
   payload.system = [billingBlock, ...keptInSystem];
   payload.messages = outgoingMessages;
 
-    // 6. Obfuscate tool names that trigger Anthropic's billing detection
+  // 6. Obfuscate tool names that trigger Anthropic's billing detection.
+  obfuscateReplayedToolNamesInMessages(payload);
   obfuscateToolNames(payload);
 
   // NOTE: CCH signature computation happens in the custom fetch layer,
