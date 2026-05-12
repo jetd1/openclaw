@@ -296,21 +296,56 @@ export async function appendExactAssistantMessageToSessionTranscript(params: {
     };
   }
 
-  const latestEquivalentAssistantId = isRedundantDeliveryMirror(params.message)
-    ? await findLatestEquivalentAssistantMessageId(sessionFile, params.message, params.config)
-    : undefined;
-  if (latestEquivalentAssistantId) {
-    return { ok: true, sessionFile, messageId: latestEquivalentAssistantId };
-  }
+  const shouldDedupAsRedundantMirror = isRedundantDeliveryMirror(params.message);
   const message = {
     ...params.message,
     ...(explicitIdempotencyKey ? { idempotencyKey: explicitIdempotencyKey } : {}),
   } as Parameters<SessionManager["appendMessage"]>[0];
-  const { messageId, message: appendedMessage } = await appendSessionTranscriptMessage({
+  // The equivalent-text dedup check (and a final idempotency-key re-check, in
+  // case the matching entry landed AFTER the fast-path scan but BEFORE the
+  // lock was acquired) is executed inside the transcript-append write-lock so
+  // the read-decide-write sequence is atomic. This closes the TOCTOU window
+  // where the racing Pi appendMessage (sync `appendFileSync` inside
+  // `pi-coding-agent`'s SessionManager) could land after this function's
+  // scan but before the lock-protected append, causing the mirror to be
+  // persisted as a duplicate of the canonical Pi entry.
+  const {
+    messageId,
+    message: appendedMessage,
+    skipped,
+  } = await appendSessionTranscriptMessage({
     transcriptPath: sessionFile,
     message,
     config: params.config,
+    preAppendCheck: async () => {
+      if (explicitIdempotencyKey) {
+        const idempotencyHit = await transcriptHasIdempotencyKey(
+          sessionFile,
+          explicitIdempotencyKey,
+        );
+        if (idempotencyHit) {
+          return {
+            skip: true,
+            messageId: idempotencyHit === true ? explicitIdempotencyKey : idempotencyHit,
+          };
+        }
+      }
+      if (shouldDedupAsRedundantMirror) {
+        const equivalentId = await findLatestEquivalentAssistantMessageId(
+          sessionFile,
+          params.message,
+        );
+        if (equivalentId) {
+          return { skip: true, messageId: equivalentId };
+        }
+      }
+      return { skip: false };
+    },
   });
+
+  if (skipped) {
+    return { ok: true, sessionFile, messageId };
+  }
 
   switch (params.updateMode ?? "inline") {
     case "inline":

@@ -306,6 +306,97 @@ describe("appendAssistantMessageToSessionTranscript", () => {
     }
   });
 
+  it("deduplicates mirror against a Pi entry that lands during the mirror's lock wait (TOCTOU regression)", async () => {
+    writeTranscriptStore();
+    const sessionFile = resolveSessionTranscriptPathInDir(sessionId, fixture.sessionsDir());
+
+    // Pre-create the session file with a header so both the mirror and the
+    // racing append skip `ensureSessionHeader`'s writeFile (which would
+    // otherwise race on truncate-then-write when both writers see the file
+    // as non-existent simultaneously). In production this is guaranteed
+    // because the Pi entry is always written first by
+    // `pi-coding-agent`'s SessionManager, which creates the file before the
+    // mirror gets a chance to run.
+    fs.writeFileSync(
+      sessionFile,
+      `${JSON.stringify({
+        type: "session",
+        version: 3,
+        id: sessionId,
+        timestamp: new Date().toISOString(),
+        cwd: process.cwd(),
+      })}\n`,
+      { mode: 0o600 },
+    );
+
+    // Race scenario: the racing Pi appendMessage lands BETWEEN the moment the
+    // mirror's `appendAssistantMessageToSessionTranscript` is invoked and the
+    // moment its dedup scan would actually run on disk.
+    //
+    // With the dedup pulled inside the write lock + serialization queue, the
+    // racing Pi append (acquired on the same lock) runs to completion first.
+    // When the mirror's pre-append check finally runs, the Pi entry is
+    // already visible to the reverse-scan, so the mirror is correctly skipped
+    // and the file is not duplicated.
+    //
+    // NOTE: This test exercises the post-fix contract (`preAppendCheck`
+    // observes the racing entry under the lock). A true cross-process TOCTOU
+    // reproduction is not achievable from a single Node process because
+    // OpenClaw's file lock is reentrant within the same process, so a same-
+    // process raw `fs.appendFileSync` cannot be made to land in the exact
+    // sub-microtask window between the mirror's pre-lock scan and its lock-
+    // protected append. The cross-process race was confirmed deterministic in
+    // production and is documented in the commit message.
+    const racingPiPromise = (async () => {
+      // Yield a microtask so that the mirror call has a chance to enter the
+      // serialization queue first. The lock is fair (FIFO) so whichever side
+      // entered first gets the lock first regardless. We only need the racing
+      // Pi entry to land while the mirror is still in flight.
+      await Promise.resolve();
+      const racingMessage = createExactAssistantMessage({
+        text: "Streamed text from racing Pi",
+      });
+      // The Pi entry persists with provider!=openclaw so the mirror's dedup
+      // will recognize it as a candidate match.
+      racingMessage.provider = "anthropic";
+      racingMessage.model = "claude-opus-4-7";
+      await appendSessionTranscriptMessage({
+        transcriptPath: sessionFile,
+        message: racingMessage,
+      });
+    })();
+
+    const mirrorResult = await appendAssistantMessageToSessionTranscript({
+      sessionKey,
+      text: "Streamed text from racing Pi",
+      storePath: fixture.storePath(),
+    });
+    await racingPiPromise;
+
+    expect(mirrorResult.ok).toBe(true);
+    if (mirrorResult.ok) {
+      const records = fs
+        .readFileSync(mirrorResult.sessionFile, "utf-8")
+        .trim()
+        .split("\n")
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              type?: string;
+              message?: { provider?: string; model?: string };
+            },
+        );
+      const assistantMessages = records.filter(
+        (record) => record.type === "message" && record.message?.provider !== undefined,
+      );
+      // Exactly ONE assistant entry must end up on disk — either the canonical
+      // Pi entry alone (mirror correctly deduplicated) or, if the mirror
+      // somehow won the race entirely, the mirror alone. Two entries with the
+      // same text = the bug we are guarding against.
+      expect(assistantMessages.length).toBe(1);
+    }
+  });
+
   it("does not reuse an older matching assistant message across turns", async () => {
     writeTranscriptStore();
 

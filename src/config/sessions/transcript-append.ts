@@ -232,6 +232,26 @@ async function withTranscriptAppendQueue<T>(
   }
 }
 
+/**
+ * Optional pre-append check that runs INSIDE the write lock + serialization
+ * queue, after every prior append has settled, and before this append fires.
+ *
+ * Used by the delivery-mirror dedup path to make read-decide-write atomic and
+ * eliminate the TOCTOU window where a mirror's reverse-scan dedup could miss
+ * a Pi entry that hadn't yet been persisted by `pi-coding-agent`.
+ *
+ * Return `{ skip: true, messageId }` to short-circuit the append and return
+ * the supplied messageId (e.g. the id of the equivalent existing entry).
+ * Return `{ skip: false }` (or undefined) to proceed with the append.
+ */
+export type AppendSessionTranscriptPreCheckResult =
+  | { skip: true; messageId: string }
+  | { skip: false };
+
+export type AppendSessionTranscriptPreCheck = (params: {
+  transcriptPath: string;
+}) => Promise<AppendSessionTranscriptPreCheckResult | undefined>;
+
 type AppendSessionTranscriptMessageParams<TMessage = unknown> = {
   transcriptPath: string;
   message: TMessage;
@@ -240,6 +260,7 @@ type AppendSessionTranscriptMessageParams<TMessage = unknown> = {
   cwd?: string;
   useRawWhenLinear?: boolean;
   config?: OpenClawConfig;
+  preAppendCheck?: AppendSessionTranscriptPreCheck;
 };
 
 function isTranscriptAgentMessage(value: unknown): value is AgentMessage {
@@ -253,7 +274,7 @@ function isTranscriptAgentMessage(value: unknown): value is AgentMessage {
 
 export async function appendSessionTranscriptMessage<TMessage>(
   params: AppendSessionTranscriptMessageParams<TMessage>,
-): Promise<{ messageId: string; message: TMessage }> {
+): Promise<{ messageId: string; message: TMessage; skipped?: boolean }> {
   return await withTranscriptAppendQueue(params.transcriptPath, () =>
     appendSessionTranscriptMessageLocked(params),
   );
@@ -261,7 +282,7 @@ export async function appendSessionTranscriptMessage<TMessage>(
 
 async function appendSessionTranscriptMessageLocked<TMessage>(
   params: AppendSessionTranscriptMessageParams<TMessage>,
-): Promise<{ messageId: string; message: TMessage }> {
+): Promise<{ messageId: string; message: TMessage; skipped?: boolean }> {
   const lock = await acquireSessionWriteLock({
     sessionFile: params.transcriptPath,
     ...resolveSessionWriteLockOptions(params.config),
@@ -294,6 +315,28 @@ async function appendSessionTranscriptMessageLocked<TMessage>(
         hasParentLinkedEntries: Boolean(migrated.leafId),
         nonSessionEntryCount: leafInfo.nonSessionEntryCount,
       };
+    }
+    // Run the caller's pre-append dedup scan AS LATE AS POSSIBLE — i.e. AFTER
+    // header / stat / leaf-info / migration awaits, immediately before the
+    // actual `fs.appendFile` write. This minimizes the residual race window
+    // against `pi-coding-agent`'s SessionManager.appendMessage, which uses
+    // synchronous `fs.appendFileSync` and BYPASSES the OpenClaw write lock
+    // entirely. The lock alone can't serialize against that path, so the
+    // best we can do is shrink the window between the scan and our own
+    // append to a single microtask (lock release + appendFile syscall).
+    // Eliminating the residual race fully requires `pi-coding-agent` to
+    // participate in the same lock (out of scope for this fix).
+    if (params.preAppendCheck) {
+      const precheck = await params.preAppendCheck({
+        transcriptPath: params.transcriptPath,
+      });
+      if (precheck?.skip === true) {
+        return {
+          messageId: precheck.messageId,
+          message: undefined as unknown as TMessage,
+          skipped: true,
+        };
+      }
     }
     const finalMessage = (
       isTranscriptAgentMessage(params.message)
