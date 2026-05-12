@@ -3523,6 +3523,9 @@ export async function runEmbeddedAttempt(
               messages: btwSnapshotMessages,
               inFlightPrompt: promptForModel,
             });
+            // Reset the stopped flag at the start of each prompt iteration
+            // so steer messages are accepted after the first turn completes.
+            agentLoopStopped = false;
             // Mark the agent loop as started right before prompt submission
             // so steer messages are only accepted once the agent is actually running.
             agentLoopStarted = true;
