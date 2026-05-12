@@ -40,7 +40,11 @@ export {
   type EmbeddedRunModelSwitchRequest,
 } from "./run-state.js";
 
-export type EmbeddedPiQueueFailureReason = "no_active_run" | "not_streaming" | "compacting";
+export type EmbeddedPiQueueFailureReason =
+  | "no_active_run"
+  | "not_streaming"
+  | "compacting"
+  | "agent_stopped";
 
 export type EmbeddedPiQueueMessageOutcome =
   | {
@@ -131,13 +135,13 @@ export function queueEmbeddedPiMessageWithOutcome(
     diag.debug(`queue message failed: sessionId=${sessionId} reason=no_active_run`);
     return createQueueFailureOutcome(sessionId, "no_active_run");
   }
-  if (!handle.isStreaming()) {
-    diag.debug(`queue message failed: sessionId=${sessionId} reason=not_streaming`);
-    return createQueueFailureOutcome(sessionId, "not_streaming");
-  }
   if (handle.isCompacting()) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=compacting`);
     return createQueueFailureOutcome(sessionId, "compacting");
+  }
+  if (handle.isStopped?.()) {
+    diag.debug(`queue message failed: sessionId=${sessionId} reason=agent_stopped`);
+    return createQueueFailureOutcome(sessionId, "agent_stopped");
   }
   logMessageQueued({ sessionId, source: "pi-embedded-runner" });
   void handle.queueMessage(text, options ?? { steeringMode: "all" });

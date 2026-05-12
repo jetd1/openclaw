@@ -112,7 +112,6 @@ function makeRunReplyAgentParams(
     shouldSteer: false,
     shouldFollowup: false,
     isActive: false,
-    isStreaming: false,
     typing: createMockTypingController(),
     sessionCtx: {
       Provider: provider,
@@ -232,7 +231,6 @@ describe("runReplyAgent media path normalization", () => {
       makeRunReplyAgentParams({
         resolvedQueue: { mode: "steer" } as QueueSettings,
         shouldSteer: true,
-        isStreaming: true,
       }),
     );
 
@@ -248,7 +246,6 @@ describe("runReplyAgent media path normalization", () => {
       makeRunReplyAgentParams({
         resolvedQueue: { mode: "queue" } as QueueSettings,
         shouldSteer: true,
-        isStreaming: true,
       }),
     );
 

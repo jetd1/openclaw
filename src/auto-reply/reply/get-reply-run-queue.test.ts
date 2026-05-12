@@ -6,7 +6,6 @@ describe("resolvePreparedReplyQueueState", () => {
     const resolveBusyState = vi.fn(() => ({
       activeSessionId: undefined,
       isActive: false,
-      isStreaming: false,
     }));
 
     const result = await resolvePreparedReplyQueueState({
@@ -23,7 +22,7 @@ describe("resolvePreparedReplyQueueState", () => {
 
     expect(result).toEqual({
       kind: "continue",
-      busyState: { activeSessionId: undefined, isActive: false, isStreaming: false },
+      busyState: { activeSessionId: undefined, isActive: false },
     });
     expect(resolveBusyState).toHaveBeenCalledOnce();
   });
@@ -35,7 +34,6 @@ describe("resolvePreparedReplyQueueState", () => {
     const resolveBusyState = vi.fn(() => ({
       activeSessionId: undefined,
       isActive: false,
-      isStreaming: false,
     }));
 
     const result = await resolvePreparedReplyQueueState({
@@ -55,7 +53,7 @@ describe("resolvePreparedReplyQueueState", () => {
     expect(refreshPreparedState).toHaveBeenCalledOnce();
     expect(result).toEqual({
       kind: "continue",
-      busyState: { activeSessionId: undefined, isActive: false, isStreaming: false },
+      busyState: { activeSessionId: undefined, isActive: false },
     });
   });
 
@@ -72,7 +70,6 @@ describe("resolvePreparedReplyQueueState", () => {
       resolveBusyState: () => ({
         activeSessionId: "session-after-wait",
         isActive: true,
-        isStreaming: false,
       }),
     });
 

@@ -17,6 +17,13 @@ export type ReplyBackendHandle = {
    * find embedded runs that are compacting during the main run phase.
    */
   isCompacting?: () => boolean;
+  /**
+   * Returns true when the agent loop is NOT actively running — either before
+   * the first prompt starts (startup window) or after the prompt finishes
+   * (teardown window).  During these windows the steering queue will NOT be
+   * drained, so accepting messages would silently drop them.
+   */
+  isStopped?: () => boolean;
 };
 
 export type ReplyOperationPhase =
@@ -472,7 +479,7 @@ export function queueReplyRunMessage(sessionId: string, text: string): boolean {
   if (!operation || operation.phase !== "running" || !backend?.queueMessage) {
     return false;
   }
-  if (!backend.isStreaming()) {
+  if (backend.isStopped?.()) {
     return false;
   }
   void backend.queueMessage(text);

@@ -20,13 +20,19 @@ import {
 type RunHandle = Parameters<typeof setActiveEmbeddedRun>[1];
 
 function createRunHandle(
-  overrides: { isCompacting?: boolean; isStreaming?: boolean; abort?: () => void } = {},
+  overrides: {
+    isCompacting?: boolean;
+    isStreaming?: boolean;
+    isStopped?: boolean;
+    abort?: () => void;
+  } = {},
 ): RunHandle {
   const abort = overrides.abort ?? (() => {});
   return {
     queueMessage: async () => {},
     isStreaming: () => overrides.isStreaming ?? true,
     isCompacting: () => overrides.isCompacting ?? false,
+    isStopped: () => overrides.isStopped ?? false,
     abort,
   };
 }
@@ -281,5 +287,89 @@ describe("pi-embedded runner run registry", () => {
     clearActiveEmbeddedRun("session-clear-switch", handle);
 
     expect(consumeEmbeddedRunModelSwitch("session-clear-switch")).toBeUndefined();
+  });
+});
+
+describe("queueEmbeddedPiMessageWithOutcome steer guards", () => {
+  afterEach(() => {
+    __testing.resetActiveEmbeddedRuns();
+  });
+
+  function createQueueableHandle(
+    overrides: { isCompacting?: boolean; isStreaming?: boolean; isStopped?: boolean } = {},
+  ): RunHandle & { queueMessageSpy: ReturnType<typeof vi.fn> } {
+    const queueMessageSpy = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    return {
+      queueMessage: queueMessageSpy,
+      isStreaming: () => overrides.isStreaming ?? true,
+      isCompacting: () => overrides.isCompacting ?? false,
+      isStopped: () => overrides.isStopped ?? false,
+      abort: () => {},
+      queueMessageSpy,
+    };
+  }
+
+  it("returns failure when no active run exists for the session", () => {
+    const result = queueEmbeddedPiMessageWithOutcome("no-such-session", "hello");
+    expect(result.queued).toBe(false);
+    if (!result.queued) {
+      expect(result.reason).toBe("no_active_run");
+    }
+  });
+
+  it("queues message when session is active but NOT streaming (original bug case)", () => {
+    const handle = createQueueableHandle({ isStreaming: false });
+    setActiveEmbeddedRun("session-not-streaming", handle);
+
+    const result = queueEmbeddedPiMessageWithOutcome("session-not-streaming", "steer message");
+
+    expect(result.queued).toBe(true);
+    expect(handle.queueMessageSpy).toHaveBeenCalledWith("steer message", expect.any(Object));
+  });
+
+  it("returns failure when session is active but compacting", () => {
+    const handle = createQueueableHandle({ isCompacting: true });
+    setActiveEmbeddedRun("session-compacting", handle);
+
+    const result = queueEmbeddedPiMessageWithOutcome("session-compacting", "steer message");
+
+    expect(result.queued).toBe(false);
+    if (!result.queued) {
+      expect(result.reason).toBe("compacting");
+    }
+    expect(handle.queueMessageSpy).not.toHaveBeenCalled();
+  });
+
+  it("queues message when session is active and streaming (not compacting)", () => {
+    const handle = createQueueableHandle();
+    setActiveEmbeddedRun("session-streaming", handle);
+
+    const result = queueEmbeddedPiMessageWithOutcome("session-streaming", "steer message");
+
+    expect(result.queued).toBe(true);
+    expect(handle.queueMessageSpy).toHaveBeenCalledWith("steer message", expect.any(Object));
+  });
+
+  it("returns failure when agent loop is not yet running or already stopped", () => {
+    const handle = createQueueableHandle({ isStopped: true });
+    setActiveEmbeddedRun("session-stopped", handle);
+
+    const result = queueEmbeddedPiMessageWithOutcome("session-stopped", "steer message");
+
+    expect(result.queued).toBe(false);
+    if (!result.queued) {
+      expect(result.reason).toBe("agent_stopped");
+    }
+    expect(handle.queueMessageSpy).not.toHaveBeenCalled();
+  });
+
+  it("queues message when session is active, not streaming, and not stopped (tool execution)", () => {
+    const handle = createQueueableHandle({ isStreaming: false, isStopped: false });
+    setActiveEmbeddedRun("session-tool-exec", handle);
+
+    const result = queueEmbeddedPiMessageWithOutcome("session-tool-exec", "steer message");
+
+    expect(result.queued).toBe(true);
+    expect(handle.queueMessageSpy).toHaveBeenCalledWith("steer message", expect.any(Object));
   });
 });
