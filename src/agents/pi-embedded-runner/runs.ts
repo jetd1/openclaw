@@ -261,6 +261,15 @@ export function resolveActiveEmbeddedRunSessionId(sessionKey: string): string | 
   );
 }
 
+/**
+ * Lightweight check for whether an embedded run is active for a given
+ * session key.  Used by channel plugins (via run-active-check.ts re-export)
+ * to avoid pulling in the full embedded-runner module graph.
+ */
+export function isEmbeddedPiRunActiveForSessionKey(sessionKey: string): boolean {
+  return resolveActiveEmbeddedRunSessionId(sessionKey) !== undefined;
+}
+
 export function getActiveEmbeddedRunSnapshot(
   sessionId: string,
 ): ActiveEmbeddedRunSnapshot | undefined {

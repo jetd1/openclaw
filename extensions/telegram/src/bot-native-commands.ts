@@ -421,6 +421,8 @@ export type RegisterTelegramHandlerParams = {
     promptContext?: import("./bot-message-context.types.js").TelegramPromptContextEntry[],
   ) => Promise<void>;
   logger: ReturnType<typeof getChildLogger>;
+  /** Chat session cache for per-message sequentializer key resolution. */
+  chatSessionCache?: Map<string, { sessionKey: string; needsImmediateDelivery: boolean }>;
 };
 
 export function buildTelegramNativeCommandCallbackData(commandText: string): string {

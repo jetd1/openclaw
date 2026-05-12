@@ -6,6 +6,7 @@ import { readChannelAllowFromStore } from "openclaw/plugin-sdk/conversation-runt
 import { upsertChannelPairingRequest } from "openclaw/plugin-sdk/conversation-runtime";
 import { buildModelsProviderData } from "openclaw/plugin-sdk/models-provider-runtime";
 import { dispatchReplyWithBufferedBlockDispatcher } from "openclaw/plugin-sdk/reply-dispatch-runtime";
+import { isEmbeddedPiRunActiveForSessionKey } from "openclaw/plugin-sdk/reply-runtime";
 import { getRuntimeConfig } from "openclaw/plugin-sdk/runtime-config-snapshot";
 import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { loadSessionStore } from "openclaw/plugin-sdk/session-store-runtime";
@@ -27,6 +28,8 @@ export type TelegramBotDeps = {
   upsertChannelPairingRequest: typeof upsertChannelPairingRequest;
   enqueueSystemEvent: typeof enqueueSystemEvent;
   dispatchReplyWithBufferedBlockDispatcher: typeof dispatchReplyWithBufferedBlockDispatcher;
+  /** Check whether an embedded Pi run is active for a given sessionKey. */
+  isRunActiveForSessionKey?: (sessionKey: string) => boolean;
   loadWebMedia?: typeof loadWebMedia;
   buildModelsProviderData: typeof buildModelsProviderData;
   listSkillCommandsForAgents: typeof listSkillCommandsForAgents;
@@ -77,6 +80,9 @@ export const defaultTelegramBotDeps: TelegramBotDeps = {
   },
   get wasSentByBot() {
     return wasSentByBot;
+  },
+  get isRunActiveForSessionKey() {
+    return isEmbeddedPiRunActiveForSessionKey;
   },
   get resolveExecApproval() {
     return resolveTelegramExecApproval;
