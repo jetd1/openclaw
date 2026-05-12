@@ -1,7 +1,9 @@
 export {
   abortAndDrainEmbeddedPiRun,
   abortEmbeddedPiRun,
+  forceDetachEmbeddedRun,
   isEmbeddedPiRunActive,
+  isEmbeddedPiRunActiveForSessionKey,
   isEmbeddedPiRunStreaming,
   resolveActiveEmbeddedRunSessionId,
   runEmbeddedPiAgent,

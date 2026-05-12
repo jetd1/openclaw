@@ -907,6 +907,7 @@ export async function runPreparedReply(
     };
   };
   let { activeSessionId, isActive, isStreaming } = resolveQueueBusyState();
+  let queueWaitInterrupted = false;
   const shouldSteer = !effectiveResetTriggered && isSteeringQueueMode(resolvedQueue.mode);
   const shouldFollowup =
     !effectiveResetTriggered &&
@@ -931,6 +932,8 @@ export async function runPreparedReply(
         piRuntime?.abortEmbeddedPiRun(activeRunSessionId) ?? false,
       waitForActiveRunEnd: (activeRunSessionId) =>
         piRuntime?.waitForEmbeddedPiRunEnd(activeRunSessionId) ?? Promise.resolve(undefined),
+      forceDetachActiveRun: (activeRunSessionId) =>
+        piRuntime?.forceDetachEmbeddedRun(activeRunSessionId) ?? false,
       refreshPreparedState: async () => {
         preparedSessionState = resolvePreparedSessionState();
         authProfileId = useFastReplyRuntime
@@ -957,6 +960,7 @@ export async function runPreparedReply(
       return queueState.reply;
     }
     ({ activeSessionId, isActive, isStreaming } = queueState.busyState);
+    queueWaitInterrupted = queueState.waitInterrupted ?? false;
   }
   const authProfileIdSource = preparedSessionState.sessionEntry?.authProfileOverrideSource;
   const runHasSessionModelOverride = Boolean(
@@ -1078,6 +1082,7 @@ export async function runPreparedReply(
     shouldSteer,
     shouldFollowup,
     isActive,
+    waitInterrupted: queueWaitInterrupted,
     isRunActive: () => {
       const latestSessionState = resolvePreparedSessionState();
       const latestActiveSessionId =
